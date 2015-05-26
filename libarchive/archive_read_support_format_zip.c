@@ -119,7 +119,7 @@ struct trad_enc_ctx {
 #define LA_USED_ZIP64	(1 << 0)
 #define LA_FROM_CENTRAL_DIRECTORY (1 << 1)
 
-/* 
+/*
  * See "WinZip - AES Encryption Information"
  *     http://www.winzip.com/aes_info.htm
  */
@@ -648,7 +648,7 @@ process_extra(const char *p, size_t extra_length, struct zip_entry* zip_entry)
 			if (datasize >= 1 && p[offset] == 1) {/* version=1 */
 				if (datasize >= 4) {
 					/* get a uid size. */
-					uidsize = p[offset+1];
+					uidsize = 0xff & (int)p[offset+1];
 					if (uidsize == 2)
 						zip_entry->uid =
 						    archive_le16dec(
@@ -660,7 +660,7 @@ process_extra(const char *p, size_t extra_length, struct zip_entry* zip_entry)
 				}
 				if (datasize >= (2 + uidsize + 3)) {
 					/* get a gid size. */
-					gidsize = p[offset+2+uidsize];
+					gidsize = 0xff & (int)p[offset+2+uidsize];
 					if (gidsize == 2)
 						zip_entry->gid =
 						    archive_le16dec(
@@ -906,18 +906,21 @@ zip_read_local_file_header(struct archive_read *a, struct archive_entry *entry,
 	archive_entry_set_atime(entry, zip_entry->atime, 0);
 
 	if ((zip->entry->mode & AE_IFMT) == AE_IFLNK) {
-		size_t linkname_length = zip_entry->compressed_size;
+		size_t linkname_length;
+
+		if (zip_entry->compressed_size > 64 * 1024) {
+			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+			    "Zip file with oversized link entry");
+			return ARCHIVE_FATAL;
+		}
+
+		linkname_length = (size_t)zip_entry->compressed_size;
 
 		archive_entry_set_size(entry, 0);
 		p = __archive_read_ahead(a, linkname_length, NULL);
 		if (p == NULL) {
 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
 			    "Truncated Zip file");
-			return ARCHIVE_FATAL;
-		}
-		if (__archive_read_consume(a, linkname_length) < 0) {
-			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
-			    "Read error skipping symlink target name");
 			return ARCHIVE_FATAL;
 		}
 
@@ -954,6 +957,12 @@ zip_read_local_file_header(struct archive_read *a, struct archive_entry *entry,
 			}
 		}
 		zip_entry->uncompressed_size = zip_entry->compressed_size = 0;
+
+		if (__archive_read_consume(a, linkname_length) < 0) {
+			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+			    "Read error skipping symlink target name");
+			return ARCHIVE_FATAL;
+		}
 	} else if (0 == (zip_entry->zip_flags & ZIP_LENGTH_AT_END)
 	    || zip_entry->uncompressed_size > 0) {
 		/* Set the size only if it's meaningful. */
@@ -1260,7 +1269,7 @@ zip_read_data_deflate(struct archive_read *a, const void **buff,
 						buff_remaining = 0;
 					else
 						buff_remaining =
-						    zip->entry_bytes_remaining
+						    (size_t)zip->entry_bytes_remaining
 						      - zip->decrypted_bytes_remaining;
 				}
 			}
@@ -1604,6 +1613,14 @@ init_traditional_PKWARE_decryption(struct archive_read *a)
 	   the start of the data area.
 	 */
 #define ENC_HEADER_SIZE	12
+	if (0 == (zip->entry->zip_flags & ZIP_LENGTH_AT_END)
+	    && zip->entry_bytes_remaining < ENC_HEADER_SIZE) {
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
+		    "Truncated Zip encrypted body: only %jd bytes available",
+		    (intmax_t)zip->entry_bytes_remaining);
+		return (ARCHIVE_FATAL);
+	}
+
 	p = __archive_read_ahead(a, ENC_HEADER_SIZE, NULL);
 	if (p == NULL) {
 		archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
@@ -1641,7 +1658,9 @@ init_traditional_PKWARE_decryption(struct archive_read *a)
 
 	__archive_read_consume(a, ENC_HEADER_SIZE);
 	zip->tctx_valid = 1;
-	zip->entry_bytes_remaining -= ENC_HEADER_SIZE;
+	if (0 == (zip->entry->zip_flags & ZIP_LENGTH_AT_END)) {
+	    zip->entry_bytes_remaining -= ENC_HEADER_SIZE;
+	}
 	/*zip->entry_uncompressed_bytes_read += ENC_HEADER_SIZE;*/
 	zip->entry_compressed_bytes_read += ENC_HEADER_SIZE;
 	zip->decrypted_bytes_remaining = 0;
@@ -2316,7 +2335,7 @@ read_zip64_eocd(struct archive_read *a, struct zip *zip, const char *p)
 	eocd64_size = archive_le64dec(p + 4) + 12;
 	if (eocd64_size < 56 || eocd64_size > 16384)
 		return;
-	if ((p = __archive_read_ahead(a, eocd64_size, NULL)) == NULL)
+	if ((p = __archive_read_ahead(a, (size_t)eocd64_size, NULL)) == NULL)
 		return;
 
 	/* Sanity-check the EOCD64 */

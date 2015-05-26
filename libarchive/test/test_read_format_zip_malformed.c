@@ -1,5 +1,6 @@
 /*-
- * Copyright (c) 2009 Michihiro NAKAJIMA
+ * Copyright (c) 2003-2007 Tim Kientzle
+ * Copyright (c) 2011 Michihiro NAKAJIMA
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -21,46 +22,40 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * $FreeBSD$
  */
+#include "test.h"
+__FBSDID("$FreeBSD$");
 
-#ifndef BSDTAR_WINDOWS_H
-#define	BSDTAR_WINDOWS_H 1
-#include <direct.h>
-#include <windows.h>
-#include <io.h>
-#include <fcntl.h>
+static void
+test_malformed1(void)
+{
+	const char *refname = "test_read_format_zip_malformed1.zip";
+	struct archive *a;
+	struct archive_entry *ae;
+	char *p;
+	size_t s;
 
-#ifndef PRId64
-#define	PRId64 "I64"
-#endif
-#define	geteuid()	0
+	extract_reference_file(refname);
 
-#ifndef __WATCOMC__
+	/* Verify with seeking reader. */
+	assert((a = archive_read_new()) != NULL);
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_filter_all(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_format_all(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_open_filename(a, refname, 10240));
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_next_header(a, &ae));
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_free(a));
 
-#ifndef S_IFIFO
-#define	S_IFIFO	0010000 /* pipe */
-#endif
+	/* Verify with streaming reader. */
+	p = slurpfile(&s, refname);
+	assert((a = archive_read_new()) != NULL);
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_filter_all(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_format_all(a));
+	assertEqualIntA(a, ARCHIVE_OK, read_open_memory(a, p, s, 31));
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_next_header(a, &ae));
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_free(a));
+}
 
-#include <string.h>  /* Must include before redefining 'strdup' */
-#if !defined(__BORLANDC__)
-#define	strdup _strdup
-#endif
-#if !defined(__BORLANDC__)
-#define	getcwd _getcwd
-#endif
-
-#define	chdir __tar_chdir
-int __tar_chdir(const char *);
-
-#ifndef S_ISREG
-#define	S_ISREG(a)	(a & _S_IFREG)
-#endif
-#ifndef S_ISBLK
-#define	S_ISBLK(a)	(0)
-#endif
-
-#endif
-
-#endif /* BSDTAR_WINDOWS_H */
+DEFINE_TEST(test_read_format_zip_malformed)
+{
+	test_malformed1();
+}

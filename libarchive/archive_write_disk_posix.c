@@ -1467,7 +1467,7 @@ _archive_write_disk_data_block(struct archive *_a,
 		return (r);
 	if ((size_t)r < size) {
 		archive_set_error(&a->archive, 0,
-		    "Write request too large");
+		    "Too much data: Truncating file at %ju bytes", (uintmax_t)a->filesize);
 		return (ARCHIVE_WARN);
 	}
 #if ARCHIVE_VERSION_NUMBER < 3999000
@@ -2509,8 +2509,9 @@ cleanup_pathname_win(struct archive_write_disk *a)
 /*
  * Canonicalize the pathname.  In particular, this strips duplicate
  * '/' characters, '.' elements, and trailing '/'.  It also raises an
- * error for an empty path, a trailing '..' or (if _SECURE_NODOTDOT is
- * set) any '..' in the path.
+ * error for an empty path, a trailing '..', (if _SECURE_NODOTDOT is
+ * set) any '..' in the path or (if ARCHIVE_EXTRACT_SECURE_NOABSOLUTEPATHS
+ * is set) if the path is absolute.
  */
 static int
 cleanup_pathname(struct archive_write_disk *a)
@@ -2529,8 +2530,15 @@ cleanup_pathname(struct archive_write_disk *a)
 	cleanup_pathname_win(a);
 #endif
 	/* Skip leading '/'. */
-	if (*src == '/')
+	if (*src == '/') {
+		if (a->flags & ARCHIVE_EXTRACT_SECURE_NOABSOLUTEPATHS) {
+			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+			                  "Path is absolute");
+			return (ARCHIVE_FAILED);
+		}
+
 		separator = *src++;
+	}
 
 	/* Scan the pathname one element at a time. */
 	for (;;) {

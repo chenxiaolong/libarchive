@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2009 Michihiro NAKAJIMA
+ * Copyright (c) 2003-2008,2015 Tim Kientzle
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -21,46 +21,25 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * $FreeBSD$
  */
+#include "test.h"
 
-#ifndef BSDTAR_WINDOWS_H
-#define	BSDTAR_WINDOWS_H 1
-#include <direct.h>
-#include <windows.h>
-#include <io.h>
-#include <fcntl.h>
+DEFINE_TEST(test_read_too_many_filters)
+{
+	const char *name = "test_read_too_many_filters.gz";
+	struct archive *a;
+	int r;
 
-#ifndef PRId64
-#define	PRId64 "I64"
-#endif
-#define	geteuid()	0
+	assert((a = archive_read_new()) != NULL);
+	r = archive_read_support_filter_gzip(a);
+	if (r == ARCHIVE_WARN) {
+		skipping("gzip reading not fully supported on this platform");
+	}
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_format_all(a));
+	extract_reference_file(name);
+	assertEqualIntA(a, ARCHIVE_FATAL,
+	    archive_read_open_filename(a, name, 200));
 
-#ifndef __WATCOMC__
-
-#ifndef S_IFIFO
-#define	S_IFIFO	0010000 /* pipe */
-#endif
-
-#include <string.h>  /* Must include before redefining 'strdup' */
-#if !defined(__BORLANDC__)
-#define	strdup _strdup
-#endif
-#if !defined(__BORLANDC__)
-#define	getcwd _getcwd
-#endif
-
-#define	chdir __tar_chdir
-int __tar_chdir(const char *);
-
-#ifndef S_ISREG
-#define	S_ISREG(a)	(a & _S_IFREG)
-#endif
-#ifndef S_ISBLK
-#define	S_ISBLK(a)	(0)
-#endif
-
-#endif
-
-#endif /* BSDTAR_WINDOWS_H */
+	assertEqualInt(ARCHIVE_OK, archive_read_close(a));
+	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+}

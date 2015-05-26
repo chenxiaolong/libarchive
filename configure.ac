@@ -12,13 +12,13 @@ m4_define([BSDTAR_VERSION_S],LIBARCHIVE_VERSION_S())
 m4_define([BSDCPIO_VERSION_S],LIBARCHIVE_VERSION_S())
 m4_define([BSDCAT_VERSION_S],LIBARCHIVE_VERSION_S())
 
-AC_PREREQ(2.65)
+AC_PREREQ([2.69])
 
 #
 # Now starts the "real" configure script.
 #
 
-AC_INIT([libarchive],LIBARCHIVE_VERSION_S(),[libarchive-discuss@googlegroups.com])
+AC_INIT([libarchive],[LIBARCHIVE_VERSION_S()],[libarchive-discuss@googlegroups.com])
 # Make sure the srcdir contains "libarchive" directory
 AC_CONFIG_SRCDIR([libarchive])
 # Use auxiliary subscripts from this subdirectory (cleans up root)
@@ -107,6 +107,7 @@ AC_USE_SYSTEM_EXTENSIONS
 AC_LIBTOOL_WIN32_DLL
 AC_PROG_LIBTOOL
 AC_CHECK_TOOL([STRIP],[strip])
+AC_PROG_MKDIR_P
 
 #
 # Options for building bsdtar.
@@ -364,6 +365,7 @@ AC_ARG_WITH([lzma],
 if test "x$with_lzma" != "xno"; then
   AC_CHECK_HEADERS([lzma.h])
   AC_CHECK_LIB(lzma,lzma_stream_decoder)
+  AC_CHECK_FUNCS([lzma_stream_encoder_mt])
 fi
 
 AC_ARG_WITH([lzo2],
@@ -472,7 +474,7 @@ fi
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_C_CONST
-# AC_TYPE_UID_T defaults to "int", which is incorrect for MinGW
+# la_TYPE_UID_T defaults to "int", which is incorrect for MinGW
 # and MSVC. Use a customized version.
 la_TYPE_UID_T
 AC_TYPE_MODE_T
@@ -585,7 +587,7 @@ AC_CHECK_FUNCS([readpassphrase])
 AC_CHECK_FUNCS([select setenv setlocale sigaction statfs statvfs])
 AC_CHECK_FUNCS([strchr strdup strerror strncpy_s strrchr symlink timegm])
 AC_CHECK_FUNCS([tzset unsetenv utime utimensat utimes vfork])
-AC_CHECK_FUNCS([wcrtomb wcscmp wcscpy wcslen wctomb wmemcmp wmemcpy])
+AC_CHECK_FUNCS([wcrtomb wcscmp wcscpy wcslen wctomb wmemcmp wmemcpy wmemmove])
 AC_CHECK_FUNCS([_ctime64_s _fseeki64])
 AC_CHECK_FUNCS([_get_timezone _localtime64_s _mkgmtime64])
 # detects cygwin-1.7, as opposed to older versions
@@ -628,7 +630,7 @@ AC_ARG_ENABLE([xattr],
 if test "x$enable_xattr" != "xno"; then
 	AC_CHECK_HEADERS([attr/xattr.h])
 	AC_CHECK_HEADERS([sys/xattr.h sys/ea.h])
-	AC_CHECK_LIB(attr,setxattr)
+	AC_SEARCH_LIBS([setxattr], [attr])
 	AC_CHECK_FUNCS([extattr_get_file extattr_list_file])
 	AC_CHECK_FUNCS([extattr_set_fd extattr_set_file])
 	AC_CHECK_FUNCS([fgetxattr flistxattr fsetxattr getxattr])
